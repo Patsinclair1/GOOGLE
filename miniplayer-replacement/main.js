@@ -219,6 +219,7 @@
   });
 
   // Add Button to Playbar
+  let retryCount = 0;
   function addPlaybarButton() {
       if (Spicetify.Playbar && Spicetify.Playbar.Button) {
           new Spicetify.Playbar.Button(
@@ -231,44 +232,63 @@
           const extraControls = document.querySelector(".main-nowPlayingBar-extraControls");
           if (extraControls) {
               const btn = document.createElement("button");
+              btn.title = "Miniplayer";
               btn.style.background = "transparent";
               btn.style.border = "none";
               btn.style.color = "#b3b3b3";
               btn.style.cursor = "pointer";
               btn.style.padding = "0 10px";
+              btn.style.height = "32px";
+              btn.style.display = "flex";
+              btn.style.alignItems = "center";
               btn.innerHTML = '<svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M15 1H1v14h14V1zM0 0h16v16H0V0z"/></svg>';
               btn.onclick = toggleMiniplayer;
               extraControls.prepend(btn);
           } else {
-              setTimeout(addPlaybarButton, 1000);
+              retryCount++;
+              if (retryCount < 20) { // Stop after ~20 seconds
+                  setTimeout(addPlaybarButton, 1000);
+              }
           }
       }
   }
 
   // Player Logic
   function updateNowPlaying() {
-      if (!Spicetify.Player || !Spicetify.Player.data) return;
-      const track = Spicetify.Player.data.track;
-      if (!track) return;
+      try {
+          if (!Spicetify.Player || !Spicetify.Player.data) return;
+          const track = Spicetify.Player.data.track;
+          if (!track || !track.metadata) return;
 
-      const meta = track.metadata;
-      const art = meta.image_xlarge_url || meta.image_large_url || meta.image_url;
-      const title = meta.title;
-      const artist = meta.artist_name;
+          const meta = track.metadata;
+          const art = meta.image_xlarge_url || meta.image_large_url || meta.image_url || '';
+          const title = meta.title || 'Unknown Title';
+          const artist = meta.artist_name || 'Unknown Artist';
 
-      document.getElementById("mp-album-art").src = art;
-      document.getElementById("mp-track-title").innerText = title;
-      document.getElementById("mp-track-artist").innerText = artist;
+          const artEl = document.getElementById("mp-album-art");
+          if (artEl) artEl.src = art;
 
-      updatePlayButton();
+          const titleEl = document.getElementById("mp-track-title");
+          if (titleEl) titleEl.innerText = title;
+
+          const artistEl = document.getElementById("mp-track-artist");
+          if (artistEl) artistEl.innerText = artist;
+
+          updatePlayButton();
+      } catch (e) {
+          console.error("Update Now Playing Error:", e);
+      }
   }
 
   function updatePlayButton() {
+      if (!Spicetify.Player) return;
       const isPaused = Spicetify.Player.isPlaying === false;
-      // Icons
-      document.getElementById("mp-play-btn").innerHTML = isPaused
-        ? '<svg height="24" width="24" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1.713a.7.7 0 011.05-.607l10.89 6.288a.7.7 0 010 1.212L4.05 14.894A.7.7 0 013 14.288V1.713z"/></svg>'
-        : '<svg height="24" width="24" viewBox="0 0 16 16" fill="currentColor"><path d="M2.7 1a.7.7 0 00-.7.7v12.6a.7.7 0 00.7.7h2.6a.7.7 0 00.7-.7V1.7a.7.7 0 00-.7-.7H2.7zm8 0a.7.7 0 00-.7.7v12.6a.7.7 0 00.7.7h2.6a.7.7 0 00.7-.7V1.7a.7.7 0 00-.7-.7h-2.6z"/></svg>';
+      const btn = document.getElementById("mp-play-btn");
+      if (btn) {
+          btn.innerHTML = isPaused
+            ? '<svg height="24" width="24" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1.713a.7.7 0 011.05-.607l10.89 6.288a.7.7 0 010 1.212L4.05 14.894A.7.7 0 013 14.288V1.713z"/></svg>'
+            : '<svg height="24" width="24" viewBox="0 0 16 16" fill="currentColor"><path d="M2.7 1a.7.7 0 00-.7.7v12.6a.7.7 0 00.7.7h2.6a.7.7 0 00.7-.7V1.7a.7.7 0 00-.7-.7H2.7zm8 0a.7.7 0 00-.7.7v12.6a.7.7 0 00.7.7h2.6a.7.7 0 00.7-.7V1.7a.7.7 0 00-.7-.7h-2.6z"/></svg>';
+      }
   }
 
   // Debounce Utility
@@ -377,16 +397,23 @@
 
   // Wait for Spicetify
   function waitForSpicetify() {
-      if (typeof Spicetify !== "undefined" && (Spicetify.Playbar || document.querySelector(".main-nowPlayingBar-extraControls")) && Spicetify.Player) {
+      if (!Spicetify || !Spicetify.Player || !Spicetify.CosmosAsync) {
+          setTimeout(waitForSpicetify, 1000);
+          return;
+      }
+
+      try {
           addPlaybarButton();
 
           Spicetify.Player.addEventListener("songchange", updateNowPlaying);
           Spicetify.Player.addEventListener("onplaypause", updatePlayButton);
 
-          // Initial update
-          updateNowPlaying();
-      } else {
-          setTimeout(waitForSpicetify, 1000);
+          // Initial update if ready
+          if (Spicetify.Player.data) {
+              updateNowPlaying();
+          }
+      } catch (e) {
+          console.error("Miniplayer Extension Error:", e);
       }
   }
   waitForSpicetify();
